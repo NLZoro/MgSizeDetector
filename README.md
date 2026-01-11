@@ -66,7 +66,7 @@ The project does not have an API reference, as it is a static website.
 
 👤 Author
 ----------
-The AI Cup Sizing Tool was created by [Your Name](https://github.com/your-username).
+The AI Cup Sizing Tool was created by [MEEE](https://github.com/NLZoro).
 
 📝 License
 ----------
