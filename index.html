@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Cup Sizing Tool</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+
+    <style>
+        body {
+            background-color: #1a1a1a; /* Dark Mode */
+            color: white;
+            font-family: 'Segoe UI', sans-serif;
+            text-align: center;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        h1 { margin-bottom: 10px; font-size: 24px; }
+        p { color: #aaa; margin-top: 0; }
+
+        /* THE CONTAINER - Holds both video and canvas */
+        .camera-box {
+            position: relative;
+            width: 640px;
+            height: 480px;
+            border: 4px solid #00FF00; /* Green Border */
+            border-radius: 12px;
+            overflow: hidden; /* Hides corners */
+            background: black;
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.2);
+        }
+
+        /* Forces them to stack perfectly on top of each other */
+        #input_video, #output_canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Hide the raw video, we only want to see the canvas drawing */
+        #input_video {
+            display: none; 
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Virtual Sizing Tool</h1>
+    <p id="status">Loading AI Model...</p>
+
+    <div class="camera-box">
+        <video id="input_video"></video>
+        <canvas id="output_canvas" width="640" height="480"></canvas>
+    </div>
+
+    <script>
+        const videoElement = document.getElementById('input_video');
+        const canvasElement = document.getElementById('output_canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const statusText = document.getElementById('status');
+
+        // CONSTANTS
+        const REAL_CARD_WIDTH_MM = 85.6; 
+        const BOX_WIDTH_PX = 200;
+        const PIXELS_TO_CM = (REAL_CARD_WIDTH_MM / BOX_WIDTH_PX) / 10; // /10 to convert mm to cm
+
+        function calculateDistance(point1, point2) {
+            const x1 = point1.x * canvasElement.width;
+            const y1 = point1.y * canvasElement.height;
+            const x2 = point2.x * canvasElement.width;
+            const y2 = point2.y * canvasElement.height;
+            return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+        }
+
+        function onResults(results) {
+            statusText.innerText = "1. Hold Card in Green Box   |   2. Turn Sideways & Touch Chest";
+
+            // Prepare Canvas
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+            // 1. Draw Camera Image (Flipped horizontally for mirror effect)
+            canvasCtx.translate(canvasElement.width, 0);
+            canvasCtx.scale(-1, 1);
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+            canvasCtx.setTransform(1, 0, 0, 1, 0, 0); // Restore normal orientation for text
+
+            // 2. Draw Calibration Box (Top Left)
+            canvasCtx.beginPath();
+            canvasCtx.rect(20, 20, BOX_WIDTH_PX, 130);
+            canvasCtx.lineWidth = 3;
+            canvasCtx.strokeStyle = "#00FF00";
+            canvasCtx.stroke();
+            
+            canvasCtx.fillStyle = "#00FF00";
+            canvasCtx.font = "bold 16px Arial";
+            canvasCtx.fillText("FIT CARD HERE", 40, 90);
+
+            if (results.poseLandmarks) {
+                // Draw Skeleton
+                drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, 
+                             {color: 'rgba(0, 255, 0, 0.3)', lineWidth: 2});
+                drawLandmarks(canvasCtx, results.poseLandmarks, 
+                            {color: 'rgba(255, 0, 0, 0.5)', lineWidth: 1});
+
+                const leftShoulder = results.poseLandmarks[11];
+                const rightShoulder = results.poseLandmarks[12];
+                const leftIndex = results.poseLandmarks[19];
+
+                // Check if user is turned sideways (Shoulder gap is small)
+                const shoulderGap = Math.abs((leftShoulder.x * canvasElement.width) - (rightShoulder.x * canvasElement.width));
+
+                if (shoulderGap < 45) { // Strict threshold for side view
+                    
+                    // MEASURE DEPTH (Shoulder to Finger)
+                    const depthPixels = calculateDistance(leftShoulder, leftIndex);
+                    const depthCm = (depthPixels * PIXELS_TO_CM).toFixed(1);
+
+                    // Draw Yellow Measurement Line
+                    canvasCtx.beginPath();
+                    canvasCtx.moveTo(leftShoulder.x * canvasElement.width, leftShoulder.y * canvasElement.height);
+                    canvasCtx.lineTo(leftIndex.x * canvasElement.width, leftIndex.y * canvasElement.height);
+                    canvasCtx.strokeStyle = "yellow";
+                    canvasCtx.lineWidth = 6;
+                    canvasCtx.stroke();
+
+                    // Show Text (Top Right - Out of the way)
+                    canvasCtx.fillStyle = "yellow";
+                    canvasCtx.font = "bold 50px Arial";
+                    canvasCtx.fillText(`${depthCm} cm`, 400, 80);
+                    
+                    canvasCtx.fillStyle = "white";
+                    canvasCtx.font = "20px Arial";
+                    canvasCtx.fillText("Depth Detected", 400, 110);
+
+                } else {
+                    // Prompt user to turn
+                    canvasCtx.fillStyle = "white";
+                    canvasCtx.font = "20px Arial";
+                    canvasCtx.fillText("Turn 90° Sideways", 400, 60);
+                }
+            }
+            canvasCtx.restore();
+        }
+
+        const pose = new Pose({locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+        }});
+        pose.setOptions({
+            modelComplexity: 1,
+            smoothLandmarks: true,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+        pose.onResults(onResults);
+
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                await pose.send({image: videoElement});
+            },
+            width: 640,
+            height: 480
+        });
+        camera.start();
+    </script>
+</body>
+</html>

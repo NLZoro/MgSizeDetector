@@ -1,0 +1,26 @@
+body {
+    background-color: #222; /* Dark mode makes it easier to see */
+    color: white;
+    font-family: sans-serif;
+    text-align: center;
+    margin: 0;
+    padding: 20px;
+}
+
+.video-container {
+    position: relative; /* This acts as the anchor */
+    width: 640px;
+    height: 480px;
+    margin: 0 auto;
+    border: 4px solid #00FF00; /* Green border */
+    background-color: black;
+}
+
+/* This forces both Video and Canvas to sit on top of each other */
+#input_video, #output_canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
